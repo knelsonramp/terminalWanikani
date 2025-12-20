@@ -152,8 +152,6 @@ def main():
     while True:
         assignments = get_assignments(limit=10, review_type=review_type)
 
-        print(assignments)
-        return
         if not assignments:
             print("\nNo more assignments available!")
             break
