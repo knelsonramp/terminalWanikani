@@ -39,7 +39,6 @@ def get_subject(subject_id):
 
 def get_kanji_by_level(level):
     """Get all kanji from a specific level"""
-    time.sleep(0.6)
     params = {
         "types": "kanji",
         "levels": str(level)
@@ -152,6 +151,9 @@ def main():
     
     while True:
         assignments = get_assignments(limit=10, review_type=review_type)
+
+        print(assignments)
+        return
         if not assignments:
             print("\nNo more assignments available!")
             break
