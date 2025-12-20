@@ -37,6 +37,17 @@ def get_subject(subject_id):
     r.raise_for_status()
     return r.json()  # Return the full response including 'object' field
 
+def get_kanji_by_level(level):
+    """Get all kanji from a specific level"""
+    time.sleep(0.6)
+    params = {
+        "types": "kanji",
+        "levels": str(level)
+    }
+    r = requests.get(f"{BASE_URL}/subjects", headers=HEADERS, params=params)
+    r.raise_for_status()
+    return r.json()["data"]
+
 def submit_review(assignment_id, incorrect_meaning, incorrect_reading):
     payload = {
         "review": {
@@ -55,24 +66,89 @@ def main():
     print("2. Recent Mistakes (review incorrect answers)")
     print("3. Recent Lessons (review apprentice items)")
     print("4. Burned Items (review mastered items)")
+    print("5. Kanji by Level (practice specific level)")
     
     while True:
-        choice = input("\nSelect review type (1-4): ").strip()
-        if choice in ["1", "2", "3", "4"]:
+        choice = input("\nSelect review type (1-5): ").strip()
+        if choice in ["1", "2", "3", "4", "5"]:
             break
-        print("Invalid choice. Please enter 1, 2, 3, or 4.")
+        print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
     
     review_types = {
         "1": "assignments",
         "2": "recent_mistakes",
         "3": "recent_lessons",
-        "4": "burned"
+        "4": "burned",
+        "5": "kanji_by_level"
     }
     review_type = review_types[choice]
-    is_practice_mode = (review_type in ["burned", "recent_lessons", "recent_mistakes"])  # Don't submit reviews for these
+    is_practice_mode = (review_type in ["burned", "recent_lessons", "recent_mistakes", "kanji_by_level"])  # Don't submit reviews for these
     
     if is_practice_mode:
         print("\n[Practice Mode - Reviews will not be submitted to WaniKani]\n")
+    
+    # Handle kanji by level
+    if review_type == "kanji_by_level":
+        while True:
+            try:
+                level = int(input("Enter level (1-60): ").strip())
+                if 1 <= level <= 60:
+                    break
+                print("Please enter a number between 1 and 60.")
+            except ValueError:
+                print("Please enter a valid number.")
+        
+        kanji_subjects = get_kanji_by_level(level)
+        if not kanji_subjects:
+            print(f"\nNo kanji found for level {level}!")
+            return
+        
+        print(f"\nFetched {len(kanji_subjects)} kanji from level {level}.")
+        
+        queue = []
+        for subject in kanji_subjects:
+            chars = subject["data"].get("characters", "")
+            meanings = ", ".join(m["meaning"] for m in subject["data"]["meanings"] if m["primary"])
+            readings = ", ".join(r["reading"] for r in subject["data"].get("readings", []) if r["primary"])
+            subject_type = subject.get("object", "")
+            queue.append({
+                "assignment_id": None,  # No assignment ID for level-based review
+                "chars": chars,
+                "meanings": meanings,
+                "readings": readings,
+                "subject_type": subject_type,
+                "incorrect_meaning": 0,
+                "incorrect_reading": 0,
+            })
+        
+        random.shuffle(queue)
+        
+        while queue:
+            item = queue.pop(0)
+
+            print("\n" + item["chars"])
+            print(f"Type: {item['subject_type'].capitalize()}")
+            input()
+            print("Meaning:", item["meanings"])
+            if item["readings"]:
+                print("Reading:", item["readings"])
+
+            while True:
+                ans = input("Y = correct\nN = incorrect: ").strip().upper()
+                if ans in ("Y", "N"):
+                    break
+
+            if ans == "N":
+                item["incorrect_meaning"] += 1
+                item["incorrect_reading"] += 1
+                if queue:
+                    pos = random.randint(1, len(queue))
+                    queue.insert(pos, item)
+                else:
+                    queue.append(item)
+        
+        print("\nLevel review complete!")
+        return
     
     while True:
         assignments = get_assignments(limit=10, review_type=review_type)
@@ -115,6 +191,7 @@ def main():
                 ans = input("Y = correct\nN = incorrect: ").strip().upper()
                 if ans in ("Y", "N"):
                     break
+            
 
             if ans == "Y":
                 if not is_practice_mode:
