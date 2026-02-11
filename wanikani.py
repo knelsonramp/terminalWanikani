@@ -216,6 +216,104 @@ def main():
         return
     
     while True:
+        # For assignments mode, fetch all available assignments upfront
+        if review_type == "assignments":
+            # Get all available assignments
+            all_assignments_data = get_assignments(limit=500, review_type=review_type)
+            
+            if not all_assignments_data:
+                print("\nNo more assignments available!")
+                break
+            
+            # Just store assignment data without fetching subjects yet
+            # We'll fetch subjects on-demand when we need them
+            print(f"\nStarting review with {len(all_assignments_data)} assignments...")
+            
+            # Shuffle assignments
+            random.shuffle(all_assignments_data)
+            
+            # Initialize active queue with first 10 assignment IDs
+            pool_size = 10
+            queue = all_assignments_data[:pool_size]
+            remaining = all_assignments_data[pool_size:]
+            
+            print(f"\n=== Starting assignment review ===")
+            print(f"Total assignments: {len(all_assignments_data)}")
+            
+            completed = 0
+            
+            while queue:
+                a = queue.pop(0)
+                
+                # Check if this is a retry (already has item data)
+                if isinstance(a, dict) and "chars" in a:
+                    # This is a retry with cached subject data
+                    item = a
+                else:
+                    # Fetch subject data on-demand for new assignments
+                    time.sleep(0.6)  # Rate limiting
+                    subject = get_subject(a["data"]["subject_id"])
+                    chars = subject["data"].get("characters") or subject["data"].get("slug", "")
+                    meanings = ", ".join(m["meaning"] for m in subject["data"]["meanings"] if m["primary"])
+                    readings = ", ".join(r["reading"] for r in subject["data"].get("readings", []) if r["primary"])
+                    subject_type = subject.get("object", "")
+                    
+                    item = {
+                        "assignment_id": a["id"],
+                        "chars": chars,
+                        "meanings": meanings,
+                        "readings": readings,
+                        "subject_type": subject_type,
+                        "incorrect_meaning": 0,
+                        "incorrect_reading": 0,
+                    }
+
+                # Auto-complete radicals
+                if str.lower(item['subject_type']) == 'radical':
+                    submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
+                    completed += 1
+                    # Add a new assignment to maintain pool of 10
+                    if remaining:
+                        new_assignment = remaining.pop(0)
+                        queue.append(new_assignment)
+                    continue
+
+                print("\n" + item["chars"])
+                print(f"Type: {item['subject_type'].capitalize()}")
+                print(f"[Remaining: {len(remaining) + len(queue)}]")
+                input()
+                print("Meaning:", item["meanings"])
+                if item["readings"]:
+                    print("Reading:", item["readings"])
+
+                while True:
+                    ans = input("Y = correct\nN = incorrect: ").strip().upper()
+                    if ans in ("Y", "N"):
+                        break
+
+                if ans == "Y":
+                    # Correct answer - submit and add new assignment to pool
+                    submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
+                    completed += 1
+                    
+                    # Add a new assignment to maintain pool of 10
+                    if remaining:
+                        new_assignment = remaining.pop(0)
+                        queue.append(new_assignment)
+                else:
+                    # Incorrect - add back to queue with incremented error count
+                    item["incorrect_meaning"] += 1
+                    item["incorrect_reading"] += 1
+                    if queue:
+                        pos = random.randint(1, len(queue))
+                        queue.insert(pos, item)
+                    else:
+                        queue.append(item)
+            
+            print(f"\n=== All assignments complete! ===")
+            break
+        
+        # Original batch mode for other review types
         assignments = get_assignments(limit=10, review_type=review_type)
 
         if not assignments:
