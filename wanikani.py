@@ -97,6 +97,24 @@ def main():
             except ValueError:
                 print("Please enter a valid number.")
         
+        # Ask if user wants batches
+        while True:
+            batch_choice = input("\nDo you want to do this in batches? (Y/N): ").strip().upper()
+            if batch_choice in ["Y", "N"]:
+                break
+            print("Please enter Y or N.")
+        
+        batch_size = None
+        if batch_choice == "Y":
+            while True:
+                try:
+                    batch_size = int(input("How many kanji per batch? ").strip())
+                    if batch_size > 0:
+                        break
+                    print("Please enter a number greater than 0.")
+                except ValueError:
+                    print("Please enter a valid number.")
+        
         kanji_subjects = get_kanji_by_level(level)
         if not kanji_subjects:
             print(f"\nNo kanji found for level {level}!")
@@ -104,13 +122,14 @@ def main():
         
         print(f"\nFetched {len(kanji_subjects)} kanji from level {level}.")
         
-        queue = []
+        # Process all kanji or in batches
+        all_kanji = []
         for subject in kanji_subjects:
             chars = subject["data"].get("characters", "")
             meanings = ", ".join(m["meaning"] for m in subject["data"]["meanings"] if m["primary"])
             readings = ", ".join(r["reading"] for r in subject["data"].get("readings", []) if r["primary"])
             subject_type = subject.get("object", "")
-            queue.append({
+            all_kanji.append({
                 "assignment_id": None,  # No assignment ID for level-based review
                 "chars": chars,
                 "meanings": meanings,
@@ -120,31 +139,78 @@ def main():
                 "incorrect_reading": 0,
             })
         
-        random.shuffle(queue)
+        random.shuffle(all_kanji)
         
-        while queue:
-            item = queue.pop(0)
+        # Process in batches or all at once
+        if batch_size:
+            # Initialize the active queue with the first batch_size kanji
+            queue = all_kanji[:batch_size]
+            remaining = all_kanji[batch_size:]
+            
+            print(f"\n=== Starting batch review with {batch_size} active kanji ===")
+            print(f"Total kanji to review: {len(all_kanji)}")
+            
+            completed = 0
+            
+            while queue:
+                item = queue.pop(0)
 
-            print("\n" + item["chars"])
-            print(f"Type: {item['subject_type'].capitalize()}")
-            input()
-            print("Meaning:", item["meanings"])
-            if item["readings"]:
-                print("Reading:", item["readings"])
+                print("\n" + item["chars"])
+                print(f"Type: {item['subject_type'].capitalize()}")
+                input()
+                print("Meaning:", item["meanings"])
+                if item["readings"]:
+                    print("Reading:", item["readings"])
 
-            while True:
-                ans = input("Y = correct\nN = incorrect: ").strip().upper()
-                if ans in ("Y", "N"):
-                    break
+                while True:
+                    ans = input("Y = correct\nN = incorrect: ").strip().upper()
+                    if ans in ("Y", "N"):
+                        break
 
-            if ans == "N":
-                item["incorrect_meaning"] += 1
-                item["incorrect_reading"] += 1
-                if queue:
-                    pos = random.randint(1, len(queue))
-                    queue.insert(pos, item)
+                if ans == "N":
+                    # Incorrect - add back to queue
+                    item["incorrect_meaning"] += 1
+                    item["incorrect_reading"] += 1
+                    if queue:
+                        pos = random.randint(1, len(queue))
+                        queue.insert(pos, item)
+                    else:
+                        queue.append(item)
                 else:
-                    queue.append(item)
+                    # Correct - mark as completed and add a new kanji if available
+                    completed += 1
+                    if remaining:
+                        new_kanji = remaining.pop(0)
+                        queue.append(new_kanji)
+            
+            print(f"\n=== Review complete! Total kanji mastered: {completed} ===")
+        else:
+            # Do all kanji without batches
+            queue = all_kanji[:]
+            
+            while queue:
+                item = queue.pop(0)
+
+                print("\n" + item["chars"])
+                print(f"Type: {item['subject_type'].capitalize()}")
+                input()
+                print("Meaning:", item["meanings"])
+                if item["readings"]:
+                    print("Reading:", item["readings"])
+
+                while True:
+                    ans = input("Y = correct\nN = incorrect: ").strip().upper()
+                    if ans in ("Y", "N"):
+                        break
+
+                if ans == "N":
+                    item["incorrect_meaning"] += 1
+                    item["incorrect_reading"] += 1
+                    if queue:
+                        pos = random.randint(1, len(queue))
+                        queue.insert(pos, item)
+                    else:
+                        queue.append(item)
         
         print("\nLevel review complete!")
         return
@@ -179,6 +245,11 @@ def main():
 
         while queue:
             item = queue.pop(0)
+
+            if(str.lower(item['subject_type']) == 'radical'):
+                submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
+                continue
+
 
             print("\n" + item["chars"])
             print(f"Type: {item['subject_type'].capitalize()}")
