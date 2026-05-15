@@ -1,4 +1,47 @@
 import requests, random, time
+import sys, tty, termios
+
+def getch():
+    """Get a single character from stdin without pressing Enter"""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
+
+def wait_for_y():
+    """Wait for user to press 'j' or 'J' to continue"""
+    while True:
+        print("Press J to continue: ", end='', flush=True)
+        ch = getch().upper()
+        if ch == 'J':
+            print('J')  # Echo the character
+            break
+        elif ch == '\x03':  # Ctrl+C
+            print('\nExiting...')
+            sys.exit(0)
+        else:
+            print(f"\nPlease press Y to continue (you pressed '{ch}')")
+
+def get_answer():
+    """Get user's answer: Y for correct, spacebar for incorrect"""
+    while True:
+        print("Answer: ", end='', flush=True)
+        ch = getch()
+        if ch.upper() == 'J':
+            print('j')  # Echo the character
+            return True  # Correct
+        elif ch == ' ':  # Spacebar
+            print('SPACE')  # Echo 
+            return False  # Incorrect
+        elif ch == '\x03':  # Ctrl+C
+            print('\nExiting...')
+            sys.exit(0)
+        else:
+            print(f"\nPlease press Y for correct or SPACEBAR for incorrect (you pressed '{ch}')")
 
 # Read API key from file
 with open("apikey.key", "r") as f:
@@ -157,17 +200,14 @@ def main():
 
                 print("\n" + item["chars"])
                 print(f"Type: {item['subject_type'].capitalize()}")
-                input()
+                wait_for_y()
                 print("Meaning:", item["meanings"])
                 if item["readings"]:
                     print("Reading:", item["readings"])
 
-                while True:
-                    ans = input("Y = correct\nN = incorrect: ").strip().upper()
-                    if ans in ("Y", "N"):
-                        break
+                is_correct = get_answer()
 
-                if ans == "N":
+                if not is_correct:
                     # Incorrect - add back to queue
                     item["incorrect_meaning"] += 1
                     item["incorrect_reading"] += 1
@@ -193,17 +233,14 @@ def main():
 
                 print("\n" + item["chars"])
                 print(f"Type: {item['subject_type'].capitalize()}")
-                input()
+                wait_for_y()
                 print("Meaning:", item["meanings"])
                 if item["readings"]:
                     print("Reading:", item["readings"])
 
-                while True:
-                    ans = input("Y = correct\nN = incorrect: ").strip().upper()
-                    if ans in ("Y", "N"):
-                        break
+                is_correct = get_answer()
 
-                if ans == "N":
+                if not is_correct:
                     item["incorrect_meaning"] += 1
                     item["incorrect_reading"] += 1
                     if queue:
@@ -268,8 +305,14 @@ def main():
                         "incorrect_reading": 0,
                     }
 
-                # Auto-complete radicals
+                # Handle radicals - show, then reveal meaning, auto-correct
                 if str.lower(item['subject_type']) == 'radical':
+                    print("\n" + item["chars"])
+                    print(f"Type: {item['subject_type'].capitalize()}")
+                    print(f"[Remaining: {len(remaining) + len(queue)}]")
+                    wait_for_y()
+                    print("Meaning:", item["meanings"])
+                    wait_for_y()
                     submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
                     completed += 1
                     # Add a new assignment to maintain pool of 10
@@ -281,17 +324,14 @@ def main():
                 print("\n" + item["chars"])
                 print(f"Type: {item['subject_type'].capitalize()}")
                 print(f"[Remaining: {len(remaining) + len(queue)}]")
-                input()
+                wait_for_y()
                 print("Meaning:", item["meanings"])
                 if item["readings"]:
                     print("Reading:", item["readings"])
 
-                while True:
-                    ans = input("Y = correct\nN = incorrect: ").strip().upper()
-                    if ans in ("Y", "N"):
-                        break
+                is_correct = get_answer()
 
-                if ans == "Y":
+                if is_correct:
                     # Correct answer - submit and add new assignment to pool
                     submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
                     completed += 1
@@ -344,25 +384,29 @@ def main():
         while queue:
             item = queue.pop(0)
 
+            # Handle radicals - show, then reveal meaning, auto-correct
             if(str.lower(item['subject_type']) == 'radical'):
-                submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
+                print("\n" + item["chars"])
+                print(f"Type: {item['subject_type'].capitalize()}")
+                wait_for_y()
+                print("Meaning:", item["meanings"])
+                wait_for_y()
+                if not is_practice_mode:
+                    submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
                 continue
 
 
             print("\n" + item["chars"])
             print(f"Type: {item['subject_type'].capitalize()}")
-            input()
+            wait_for_y()
             print("Meaning:", item["meanings"])
             if item["readings"]:
                 print("Reading:", item["readings"])
 
-            while True:
-                ans = input("Y = correct\nN = incorrect: ").strip().upper()
-                if ans in ("Y", "N"):
-                    break
+            is_correct = get_answer()
             
 
-            if ans == "Y":
+            if is_correct:
                 if not is_practice_mode:
                     submit_review(item["assignment_id"], item["incorrect_meaning"], item["incorrect_reading"])
             else:
